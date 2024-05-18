@@ -30,6 +30,7 @@ private[zio] object FiberMessage {
   final case class Stateful(onFiber: (FiberRuntime[_, _], Fiber.Status) => Unit) extends FiberMessage
   final case class Resume(effect: ZIO[_, _, _])                                  extends FiberMessage
   case object YieldNow                                                           extends FiberMessage
+  case object Preempt                                                            extends FiberMessage
 
   val resumeUnit: FiberMessage = Resume(ZIO.unit)
 }

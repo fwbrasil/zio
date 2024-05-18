@@ -133,6 +133,9 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
       tell(FiberMessage.InterruptSignal(cause))
     }
 
+  def preempt(): Unit = 
+    tell(FiberMessage.Preempt)
+
   def location: Trace = fiberId.location
 
   def poll(implicit trace: Trace): UIO[Option[Exit[E, A]]] =
@@ -305,6 +308,11 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
         case FiberMessage.Resume(_) =>
           throw new IllegalStateException("It is illegal to have multiple concurrent run loops in a single fiber")
 
+        case FiberMessage.Preempt =>
+          inbox.add(FiberMessage.YieldNow)
+          inbox.add(FiberMessage.Resume(cur0))
+          throw AsyncJump
+
         case FiberMessage.YieldNow =>
         // Ignore yield message
       }
@@ -338,6 +346,11 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
           assert(resumption eq null)
 
           resumption = nextEffect0.asInstanceOf[ZIO.Erased]
+
+        case FiberMessage.Preempt =>
+          inbox.add(FiberMessage.YieldNow)
+          inbox.add(FiberMessage.Resume(resumption))
+          throw AsyncJump
 
         case FiberMessage.YieldNow =>
 
@@ -477,7 +490,7 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
 
         EvaluationSignal.Continue
 
-      case FiberMessage.YieldNow =>
+      case FiberMessage.YieldNow | FiberMessage.Preempt =>
         // Break from the loop because we're required to yield now:
         EvaluationSignal.YieldNow
     }
@@ -1473,7 +1486,7 @@ final class FiberRuntime[E, A](fiberId: FiberId.Runtime, fiberRefs0: FiberRefs, 
 
 object FiberRuntime {
   private final val MaxForksBeforeYield      = 128
-  private final val MaxOperationsBeforeYield = 1024 * 10
+  private final val MaxOperationsBeforeYield = Int.MaxValue
   private final val MaxDepthBeforeTrampoline = 300
   private final val MaxWorkStealingDepth     = 150
   private final val WorkStealingSafetyMargin = 50
